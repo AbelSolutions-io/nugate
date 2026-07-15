@@ -94,6 +94,19 @@ API failure, no restore outputs found). Also respond to `nugate --version` / `--
 - `.github/workflows/release.yml`: tag-triggered pack + push to nuget.org via
   **trusted publishing (OIDC)** — no long-lived API-key secrets anywhere.
 
+## Integration notes (post-merge, 2026-07-15)
+
+- **Catalog-leaf hop (verified against the live API):** the registration leaf's `catalogEntry`
+  carries `published` + `listed` but NOT `created`. The immutable `created` lives in the catalog
+  leaf referenced by `catalogEntry["@id"]`; `NuGetTimestampProvider` does that extra fetch (skipped
+  if `created` is ever inlined). The earlier prose above saying the leaf "carries catalogEntry with
+  created" is corrected by this note.
+- **Fail-closed exit-code semantics:** `PolicyEngine` converts lookup failures into `LookupFailed`
+  *violations* (policy semantics rule 5), so under `onApiFailure=fail` the Tool exits **1** via the
+  normal `ShouldFail` path. Exit **2** is reserved for operational errors outside policy evaluation
+  (bad config, no restore outputs, or an exception escaping the evaluator — a defensive path that
+  should not occur in normal operation).
+
 ## House rules (all branches)
 
 - Copy discipline in every user-facing string and package description: NuGate "enforces a

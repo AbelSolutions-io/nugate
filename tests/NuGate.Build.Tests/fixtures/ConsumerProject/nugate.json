@@ -3,5 +3,5 @@
   "mode": "enforce",
   "onApiFailure": "fail",
   "allow": [],
-  "exemptPrefixes": []
+  "exemptPrefixes": ["NuGate."]
 }

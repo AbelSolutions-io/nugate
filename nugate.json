@@ -1,0 +1,6 @@
+{
+  // NuGate dogfoods itself: this repo's own dependencies pass through the age gate.
+  "minAgeDays": 7,
+  "mode": "enforce",
+  "onApiFailure": "fail"
+}
