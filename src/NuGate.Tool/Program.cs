@@ -1,3 +1,6 @@
+using System.Reflection;
+using NuGate.Core;
+
 namespace NuGate.Tool;
 
 /// <summary>
@@ -20,5 +23,45 @@ public static class Program
     public const int ExitOperationalError = 2;
 
     public static int Main(string[] args)
-        => throw new NotImplementedException("D3: implement CLI per the frozen contract above.");
+    {
+        var parsed = ArgParser.Parse(args);
+
+        switch (parsed.Mode)
+        {
+            case CliMode.ShowHelp:
+                Console.Out.WriteLine(ArgParser.HelpText);
+                return ExitPass;
+
+            case CliMode.ShowVersion:
+                Console.Out.WriteLine(GetVersion());
+                return ExitPass;
+
+            case CliMode.Error:
+                Console.Error.WriteLine(parsed.ErrorMessage);
+                return ExitOperationalError;
+
+            case CliMode.RunCheck:
+                var command = new CheckCommand(
+                    reader: new ResolvedPackageReader(),
+                    timestampProvider: new NuGetTimestampProvider(),
+                    evaluatePolicy: (config, packages, timestamps, asOfUtc, ct) =>
+                        new PolicyEngine().EvaluateAsync(config, packages, timestamps, asOfUtc, ct),
+                    loadConfig: NuGateConfig.Load,
+                    stdout: Console.Out,
+                    stderr: Console.Error,
+                    clock: () => DateTimeOffset.UtcNow);
+                return command.RunAsync(parsed.Options!, CancellationToken.None).GetAwaiter().GetResult();
+
+            default:
+                throw new InvalidOperationException($"Unhandled CLI mode '{parsed.Mode}'.");
+        }
+    }
+
+    private static string GetVersion()
+    {
+        var assembly = typeof(Program).Assembly;
+        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? "0.0.0";
+    }
 }
