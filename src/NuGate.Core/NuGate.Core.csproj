@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <!-- Keep this list minimal: every dependency here must be packed into NuGate.Build's task folder -->
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="System.Text.Json" Version="10.0.9" />
   </ItemGroup>
 
 </Project>
