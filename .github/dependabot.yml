@@ -1,0 +1,17 @@
+# Dependabot with a 7-day cooldown — NuGate's own policy, applied to NuGate.
+# New dependency versions must be public for a week before we take them.
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
