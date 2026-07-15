@@ -1,3 +1,8 @@
+using System.Globalization;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace NuGate.Core;
 
 /// <summary>Policy failure behavior when the nuget.org API cannot be reached.</summary>
@@ -57,5 +62,120 @@ public sealed class NuGateConfig
     /// a missing file yields spec defaults.
     /// </summary>
     public static NuGateConfig Load(string? path)
-        => throw new NotImplementedException("D1: implement config load + validation.");
+    {
+        // Missing / null path or missing file => spec defaults (7 / enforce / fail-closed).
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return new NuGateConfig();
+        }
+
+        string json;
+        try
+        {
+            json = File.ReadAllText(path!);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new NuGateConfigException($"Could not read config file '{path}': {ex.Message}", ex);
+        }
+
+        NuGateConfig? config;
+        try
+        {
+            config = JsonSerializer.Deserialize<NuGateConfig>(json, SerializerOptions);
+        }
+        catch (JsonException ex)
+        {
+            // Covers unknown-property errors (typo protection) and malformed JSON.
+            throw new NuGateConfigException($"Invalid {DefaultFileName} at '{path}': {ex.Message}", ex);
+        }
+
+        if (config is null)
+        {
+            return new NuGateConfig();
+        }
+
+        Validate(config, path!);
+        return config;
+    }
+
+    internal static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
+
+    private static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = false,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true,
+            // Unknown JSON properties are an error — protects against silent typos in nugate.json.
+            UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        };
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+        options.Converters.Add(new FlexibleDateTimeOffsetConverter());
+        return options;
+    }
+
+    private static void Validate(NuGateConfig config, string path)
+    {
+        if (config.MinAgeDays < 0)
+        {
+            throw new NuGateConfigException(
+                $"minAgeDays must be >= 0 (was {config.MinAgeDays}) in '{path}'.");
+        }
+
+        config.Allow ??= new List<AllowEntry>();
+        config.ExemptPrefixes ??= new List<string>();
+
+        for (var i = 0; i < config.Allow.Count; i++)
+        {
+            var entry = config.Allow[i];
+            if (entry is null || string.IsNullOrWhiteSpace(entry.Id) || string.IsNullOrWhiteSpace(entry.Version))
+            {
+                throw new NuGateConfigException(
+                    $"allow[{i}] requires both a non-empty 'id' and 'version' in '{path}'.");
+            }
+        }
+    }
+}
+
+/// <summary>Raised when <c>nugate.json</c> cannot be read, parsed, or fails validation.</summary>
+public class NuGateConfigException : Exception
+{
+    public NuGateConfigException(string message, Exception? inner = null)
+        : base(message, inner)
+    {
+    }
+}
+
+/// <summary>
+/// Parses ISO-8601 timestamps and bare calendar dates (<c>yyyy-MM-dd</c>) as UTC, so allowlist
+/// <c>expires</c> values may be written either way. Dates with no time component are treated as
+/// midnight UTC on that day.
+/// </summary>
+internal sealed class FlexibleDateTimeOffsetConverter : JsonConverter<DateTimeOffset>
+{
+    public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var text = reader.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new JsonException("Expected a date string.");
+        }
+
+        if (DateTimeOffset.TryParse(
+                text,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var value))
+        {
+            return value;
+        }
+
+        throw new JsonException($"Could not parse '{text}' as a date.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
 }

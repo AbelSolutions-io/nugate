@@ -1,0 +1,10 @@
+{
+  "minAgeDays": 14,
+  "mode": "warn",
+  "onApiFailure": "warn",
+  "allow": [
+    { "id": "SomePackage", "version": "3.1.4", "expires": "2026-08-01", "reason": "hotfix" },
+    { "id": "OtherPackage", "version": "1.0.0" }
+  ],
+  "exemptPrefixes": ["MyCompany.", "Internal."]
+}
