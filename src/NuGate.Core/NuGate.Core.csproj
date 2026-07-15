@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0: must load inside both dotnet-core and .NET Framework (VS) MSBuild task hosts -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>NuGate.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Keep this list minimal: every dependency here must be packed into NuGate.Build's task folder -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+</Project>

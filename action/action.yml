@@ -1,0 +1,35 @@
+name: NuGate
+description: Enforce a NuGet dependency age policy — fails when any resolved package version is younger than the configured minimum age, unless allowlisted.
+author: Abel Solutions
+branding:
+  icon: clock
+  color: purple
+
+inputs:
+  version:
+    description: NuGate.Tool version to install (default = latest)
+    required: false
+    default: ''
+  path:
+    description: Directory to scan for restore outputs
+    required: false
+    default: '.'
+  config:
+    description: Path to nugate.json
+    required: false
+    default: ''
+  min-age-days:
+    description: Override the configured minimum age in days
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # D4: install NuGate.Tool (pinned when inputs.version set), run `nugate check`,
+    # surface violations as GitHub annotations, propagate exit code.
+    - name: Placeholder
+      shell: bash
+      run: |
+        echo "::error::NuGate action not implemented yet (D4)"
+        exit 1

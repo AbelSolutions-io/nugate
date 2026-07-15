@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- Consumers can set NuGateEnabled=false to skip the gate (e.g. offline scratch builds) -->
+    <NuGateEnabled Condition="'$(NuGateEnabled)' == ''">true</NuGateEnabled>
+    <!-- Walks up from the project to find repo-root nugate.json; D2 finalizes discovery logic -->
+    <NuGateConfigFile Condition="'$(NuGateConfigFile)' == ''"></NuGateConfigFile>
+  </PropertyGroup>
+</Project>

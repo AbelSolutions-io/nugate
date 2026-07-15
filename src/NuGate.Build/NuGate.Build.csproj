@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0: the task must load in both .NET Framework MSBuild (VS) and dotnet MSBuild -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>NuGate.Build</PackageId>
+    <IsPackable>true</IsPackable>
+    <Description>Enforces a NuGet dependency age policy at build time: the build fails when any resolved package version (direct or transitive) is younger than the configured minimum age, unless allowlisted.</Description>
+
+    <!-- Task package shape: no lib/, everything under tasks/ + build/ (D2 finalizes packing of
+         NuGate.Core + System.Text.Json into the tasks folder — dependency isolation matters here) -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <DevelopmentDependency>true</DevelopmentDependency>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.8.43" PrivateAssets="all" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\NuGate.Core\NuGate.Core.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\NuGate.Build.targets" Pack="true" PackagePath="build\" />
+    <None Include="build\NuGate.Build.props" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+</Project>

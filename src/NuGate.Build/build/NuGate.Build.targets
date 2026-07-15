@@ -1,0 +1,15 @@
+<Project>
+  <!-- D2 finalizes: task assembly path within the package, exact hook point.
+       Contract: the gate runs after package assets are resolved and BEFORE compilation,
+       so a violating build never executes package-delivered MSBuild logic it doesn't have to. -->
+  <UsingTask TaskName="NuGate.Build.NuGateCheckTask"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\netstandard2.0\NuGate.Build.dll" />
+
+  <Target Name="NuGateCheck"
+          AfterTargets="ResolvePackageAssets"
+          BeforeTargets="CoreCompile"
+          Condition="'$(NuGateEnabled)' == 'true' AND Exists('$(ProjectAssetsFile)')">
+    <NuGateCheckTask AssetsFilePath="$(ProjectAssetsFile)"
+                     ConfigFilePath="$(NuGateConfigFile)" />
+  </Target>
+</Project>

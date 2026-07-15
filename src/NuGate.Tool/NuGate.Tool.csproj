@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>NuGate.Tool</RootNamespace>
+
+    <!-- dotnet global tool packaging -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>nugate</ToolCommandName>
+    <PackageId>NuGate.Tool</PackageId>
+    <IsPackable>true</IsPackable>
+    <Description>Enforces a NuGet dependency age policy in CI: nugate check fails when any resolved package version is younger than the configured minimum age, unless allowlisted.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NuGate.Core\NuGate.Core.csproj" />
+  </ItemGroup>
+
+</Project>

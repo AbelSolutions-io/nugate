@@ -1,0 +1,24 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!-- Package metadata (publisher = the ABEL entity, never a personal name) -->
+  <PropertyGroup>
+    <Authors>Abel Solutions</Authors>
+    <Company>Abel Solutions</Company>
+    <Copyright>© Abel Solutions</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://nugate.dev</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/abelsolutionsio/nugate</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile Condition="Exists('$(MSBuildProjectDirectory)\PACKAGE.md')">PACKAGE.md</PackageReadmeFile>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+</Project>
