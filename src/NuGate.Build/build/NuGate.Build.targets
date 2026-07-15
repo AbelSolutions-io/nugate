@@ -1,14 +1,33 @@
 <Project>
-  <!-- D2 finalizes: task assembly path within the package, exact hook point.
-       Contract: the gate runs after package assets are resolved and BEFORE compilation,
-       so a violating build never executes package-delivered MSBuild logic it doesn't have to. -->
+  <!--
+    Wires the NuGate gate into a consuming project's build.
+
+    Load isolation: the task assembly and its closure ship under tasks/netstandard2.0/ and are loaded
+    by MSBuild's default task host (the .NET Framework host in VS, the .NET host under `dotnet build`).
+    netstandard2.0 keeps that single assembly usable by both. See NuGateCheckTask remarks for the
+    rationale on not using a dedicated AppDomain/AssemblyLoadContext in v0.
+  -->
   <UsingTask TaskName="NuGate.Build.NuGateCheckTask"
              AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\netstandard2.0\NuGate.Build.dll" />
 
+  <!--
+    Runs after package assets are resolved (so $(ProjectAssetsFile) is populated) and BEFORE
+    compilation, so a violating build fails before executing package-delivered MSBuild logic or
+    producing output.
+
+    Skipped when:
+      - $(NuGateEnabled) != 'true'          (explicit opt-out; e.g. offline scratch builds)
+      - the assets file doesn't exist yet   (nothing resolved to gate)
+      - $(DesignTimeBuild) == 'true'        (IDE design-time builds must stay fast and side-effect-free)
+      - $(BuildingProject) == 'false'       (belt-and-suspenders for design-time/evaluation passes)
+  -->
   <Target Name="NuGateCheck"
           AfterTargets="ResolvePackageAssets"
           BeforeTargets="CoreCompile"
-          Condition="'$(NuGateEnabled)' == 'true' AND Exists('$(ProjectAssetsFile)')">
+          Condition="'$(NuGateEnabled)' == 'true'
+                     AND '$(DesignTimeBuild)' != 'true'
+                     AND '$(BuildingProject)' != 'false'
+                     AND Exists('$(ProjectAssetsFile)')">
     <NuGateCheckTask AssetsFilePath="$(ProjectAssetsFile)"
                      ConfigFilePath="$(NuGateConfigFile)" />
   </Target>

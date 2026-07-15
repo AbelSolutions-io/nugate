@@ -7,12 +7,31 @@
     <IsPackable>true</IsPackable>
     <Description>Enforces a NuGet dependency age policy at build time: the build fails when any resolved package version (direct or transitive) is younger than the configured minimum age, unless allowlisted.</Description>
 
-    <!-- Task package shape: no lib/, everything under tasks/ + build/ (D2 finalizes packing of
-         NuGate.Core + System.Text.Json into the tasks folder — dependency isolation matters here) -->
+    <!-- Task package shape: no lib/, everything under tasks/ + build/. The task assembly and its
+         dependency closure (NuGate.Core + System.Text.Json's netstandard2.0 closure) are packed into
+         tasks/netstandard2.0/ by the AddTaskAssembliesToPackage target below. -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <DevelopmentDependency>true</DevelopmentDependency>
+
+    <!-- netstandard2.0 libraries don't copy NuGet package assets to bin by default. A task package
+         must ship its runtime closure, so force copy-local; this also populates ReferenceCopyLocalPaths
+         with the exact closure the pack target collects. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+    <!-- Hook our packer into `dotnet pack`'s per-TFM content collection. -->
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);AddTaskAssembliesToPackage</TargetsForTfmSpecificContentInPackage>
+
+    <!-- NU5100: assemblies live under tasks/ not lib/ — intentional for a task package (they are
+         loaded by the task host, never referenced by the consumer's compile). This is the expected
+         shape, so the warning is suppressed rather than "fixed". -->
+    <NoWarn>$(NoWarn);NU5100</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Expose internals (runner/formatter/locator) to the unit test assembly. -->
+    <InternalsVisibleTo Include="NuGate.Build.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.8.43" PrivateAssets="all" ExcludeAssets="runtime" />
@@ -23,5 +42,20 @@
     <None Include="build\NuGate.Build.targets" Pack="true" PackagePath="build\" />
     <None Include="build\NuGate.Build.props" Pack="true" PackagePath="build\" />
   </ItemGroup>
+
+  <!-- Collect the task assembly + its runtime closure into tasks/netstandard2.0/. Microsoft.Build.*
+       is host-provided and must never be packed (the top-level ref already sets ExcludeAssets=runtime,
+       so it is absent from ReferenceCopyLocalPaths; the filter below is belt-and-suspenders). -->
+  <Target Name="AddTaskAssembliesToPackage" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(TargetPath)">
+        <PackagePath>tasks/$(TargetFramework)/</PackagePath>
+      </TfmSpecificPackageFile>
+      <TfmSpecificPackageFile Include="@(ReferenceCopyLocalPaths)"
+                              Condition="'%(ReferenceCopyLocalPaths.Extension)' == '.dll' AND !$([System.String]::Copy('%(ReferenceCopyLocalPaths.Filename)').StartsWith('Microsoft.Build'))">
+        <PackagePath>tasks/$(TargetFramework)/%(ReferenceCopyLocalPaths.DestinationSubDirectory)</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
 
 </Project>

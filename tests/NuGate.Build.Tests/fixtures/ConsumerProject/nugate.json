@@ -1,0 +1,7 @@
+{
+  "minAgeDays": 7,
+  "mode": "enforce",
+  "onApiFailure": "fail",
+  "allow": [],
+  "exemptPrefixes": []
+}

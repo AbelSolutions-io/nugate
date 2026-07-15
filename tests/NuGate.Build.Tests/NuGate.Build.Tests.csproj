@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- The fixture ConsumerProject is a standalone integration asset, not part of this build. -->
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <DefaultItemExcludes>$(DefaultItemExcludes);fixtures\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- We exercise the task's internals (runner, formatter, config discovery); InternalsVisibleTo
+         in NuGate.Build.csproj grants access. -->
+    <ProjectReference Include="..\..\src\NuGate.Build\NuGate.Build.csproj" />
+    <!-- Core is PrivateAssets=all on NuGate.Build (not transitively exposed), so reference it
+         directly to see PackageIdentity / Violation / PolicyResult / NuGateConfig in tests. -->
+    <ProjectReference Include="..\..\src\NuGate.Core\NuGate.Core.csproj" />
+  </ItemGroup>
+
+</Project>

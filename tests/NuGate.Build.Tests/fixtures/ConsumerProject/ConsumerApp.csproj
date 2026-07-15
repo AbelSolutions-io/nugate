@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fixture consumer for the deferred end-to-end test (runs at integration, once NuGate.Core is real).
+    It installs NuGate.Build from a local feed and lets the gate run during its restore+build.
+    See README.md in this folder for the exact command sequence.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Keep the consumer build itself from inheriting the repo's TreatWarningsAsErrors etc. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- One line, as a real consumer would add it (typically in Directory.Build.props with
+         PrivateAssets=all). Version is a floating local-feed build; pin at integration. -->
+    <PackageReference Include="NuGate.Build" Version="*" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
