@@ -94,11 +94,10 @@ jobs:
         id: nuget_login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
-          # TODO(owner): set to the Abel Solutions nuget.org account's profile/organization
-          # name (the account hosting the Abel Solutions publisher identity (GitHub org: AbelSolutions-io), registered on
-          # hello@abelsolutions.io) before the first tagged release. This is the nuget.org
-          # *username*, not an email address, password, or API key.
-          user: TODO-ABEL-SOLUTIONS-NUGET-USERNAME
+          # nuget.org username of the Abel Solutions publisher account (registered on
+          # hello@abelsolutions.io). Must match the account holding the Trusted Publishing
+          # policy for AbelSolutions-io/nugate + this workflow file.
+          user: abel-dev
 
       - name: Push packages to nuget.org
         shell: bash
