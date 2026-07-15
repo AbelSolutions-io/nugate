@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Minimal, read-only by default. No job in this workflow needs to write anything.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-pack:
+    name: Build, test, pack (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore nugate.sln
+
+      - name: Build
+        run: dotnet build nugate.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test nugate.sln --no-build --configuration Release
+
+      # Packaging smoke check: confirms both packages actually pack, not just build.
+      # NuGate.Tool packing is stable and any failure here is a real CI failure.
+      - name: Pack NuGate.Tool
+        run: dotnet pack src/NuGate.Tool/NuGate.Tool.csproj --no-restore --configuration Release --output artifacts/packages
+
+      # NuGate.Build's packing shape (tasks/ + build/ folders, dependency isolation for
+      # NuGate.Core + System.Text.Json) is being finalized in parallel on feat/build-task.
+      # Don't fail feat/ci on that in-flight work — warn instead. Once feat/build-task lands
+      # on main, consider dropping the `continue-on-error` here and packing normally.
+      - name: Pack NuGate.Build (packaging smoke check, best-effort)
+        id: pack_build
+        continue-on-error: true
+        run: dotnet pack src/NuGate.Build/NuGate.Build.csproj --no-restore --configuration Release --output artifacts/packages
+
+      - name: Flag NuGate.Build pack outcome
+        if: steps.pack_build.outcome == 'failure'
+        shell: bash
+        run: echo "::warning::dotnet pack failed for NuGate.Build. Expected while its packing shape is still being finalized on feat/build-task; not treated as a CI failure on feat/ci."

@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Minimal by default; the publish job below elevates only what it needs.
+permissions:
+  contents: read
+
+jobs:
+  # Gate the release on the same build+test matrix as CI before anything gets packed/pushed.
+  build-test:
+    name: Build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore nugate.sln
+
+      - name: Build
+        run: dotnet build nugate.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test nugate.sln --no-build --configuration Release
+
+  # Runs once (not matrixed) — packing is platform-agnostic and pushing to nuget.org must
+  # happen exactly once per tag.
+  publish:
+    name: Pack & publish to nuget.org
+    needs: build-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # gh release create + asset upload
+      id-token: write  # OIDC token for NuGet Trusted Publishing (NuGet/login)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Derive package version from tag
+        id: version
+        shell: bash
+        run: |
+          set -e
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if [ -z "${version}" ]; then
+            echo "::error::Could not derive a package version from tag '${tag}'."
+            exit 1
+          fi
+          echo "Derived package version: ${version} (from tag ${tag})"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: dotnet restore nugate.sln
+
+      - name: Pack NuGate.Tool
+        run: >
+          dotnet pack src/NuGate.Tool/NuGate.Tool.csproj
+          --no-restore --configuration Release
+          -p:Version=${{ steps.version.outputs.version }}
+          --output artifacts/packages
+
+      - name: Pack NuGate.Build
+        run: >
+          dotnet pack src/NuGate.Build/NuGate.Build.csproj
+          --no-restore --configuration Release
+          -p:Version=${{ steps.version.outputs.version }}
+          --output artifacts/packages
+
+      # Trusted Publishing (OIDC): exchanges this job's short-lived GitHub OIDC token for a
+      # ~1-hour nuget.org API key. No long-lived nuget.org secret exists anywhere in this repo.
+      #
+      # One-time setup required on nuget.org BEFORE the first release (see handoff notes):
+      # a Trusted Publishing policy must be created for this exact repo + workflow file.
+      - name: NuGet login (OIDC -> short-lived API key)
+        id: nuget_login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          # TODO(owner): set to the Abel Solutions nuget.org account's profile/organization
+          # name (the account hosting the abelsolutionsio publisher identity, registered on
+          # hello@abelsolutions.io) before the first tagged release. This is the nuget.org
+          # *username*, not an email address, password, or API key.
+          user: TODO-ABEL-SOLUTIONS-NUGET-USERNAME
+
+      - name: Push packages to nuget.org
+        shell: bash
+        run: |
+          set -e
+          shopt -s nullglob
+          pkgs=(artifacts/packages/*.nupkg)
+          if [ "${#pkgs[@]}" -eq 0 ]; then
+            echo "::error::No .nupkg files found in artifacts/packages -- nothing to publish."
+            exit 1
+          fi
+          for pkg in "${pkgs[@]}"; do
+            echo "Pushing ${pkg}"
+            dotnet nuget push "${pkg}" \
+              --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          gh release create "${GITHUB_REF_NAME}" artifacts/packages/*.nupkg \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

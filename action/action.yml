@@ -26,10 +26,175 @@ inputs:
 runs:
   using: composite
   steps:
-    # D4: install NuGate.Tool (pinned when inputs.version set), run `nugate check`,
-    # surface violations as GitHub annotations, propagate exit code.
-    - name: Placeholder
+    # Requires a .NET SDK already on PATH. Run actions/setup-dotnet (or otherwise install a
+    # dotnet SDK) as an earlier step in your job before using this action.
+    - name: Verify dotnet SDK is available
       shell: bash
       run: |
-        echo "::error::NuGate action not implemented yet (D4)"
-        exit 1
+        if ! command -v dotnet >/dev/null 2>&1; then
+          echo "::error::dotnet SDK not found on PATH. Add actions/setup-dotnet (or another dotnet SDK install step) before this action in your job."
+          exit 1
+        fi
+
+    - name: Add dotnet global tools to PATH
+      shell: bash
+      run: |
+        if [ "${RUNNER_OS:-}" = "Windows" ]; then
+          tools_dir="${USERPROFILE}/.dotnet/tools"
+        else
+          tools_dir="${HOME}/.dotnet/tools"
+        fi
+        echo "${tools_dir}" >> "$GITHUB_PATH"
+
+    - name: Install NuGate.Tool
+      shell: bash
+      env:
+        NUGATE_VERSION: ${{ inputs.version }}
+      run: |
+        set -e
+        if [ -n "${NUGATE_VERSION}" ]; then
+          echo "Installing NuGate.Tool ${NUGATE_VERSION}"
+          dotnet tool install --global NuGate.Tool --version "${NUGATE_VERSION}"
+        else
+          echo "Installing NuGate.Tool (latest)"
+          dotnet tool install --global NuGate.Tool
+        fi
+
+    - name: Run nugate check
+      id: nugate
+      shell: bash
+      env:
+        NUGATE_PATH: ${{ inputs.path }}
+        NUGATE_CONFIG: ${{ inputs.config }}
+        NUGATE_MIN_AGE_DAYS: ${{ inputs.min-age-days }}
+      run: |
+        # GitHub workflow-command escaping: order matters — escape % first, so the % introduced
+        # by the later \r/\n replacements (%0D / %0A) is never re-escaped.
+        gh_escape() {
+          local s=$1
+          s=${s//'%'/'%25'}
+          s=${s//$'\r'/'%0D'}
+          s=${s//$'\n'/'%0A'}
+          printf '%s' "$s"
+        }
+
+        stdout_file="${RUNNER_TEMP}/nugate-stdout.json"
+        stderr_file="${RUNNER_TEMP}/nugate-stderr.log"
+
+        args=(check)
+        if [ -n "${NUGATE_PATH}" ]; then
+          args+=("${NUGATE_PATH}")
+        fi
+        args+=(--json)
+        if [ -n "${NUGATE_CONFIG}" ]; then
+          args+=(--config "${NUGATE_CONFIG}")
+        fi
+        if [ -n "${NUGATE_MIN_AGE_DAYS}" ]; then
+          args+=(--min-age-days "${NUGATE_MIN_AGE_DAYS}")
+        fi
+
+        echo "Running: nugate ${args[*]}"
+
+        exit_code=0
+        nugate "${args[@]}" >"${stdout_file}" 2>"${stderr_file}" || exit_code=$?
+
+        # Always echo the tool's own stderr to the step log for debugging (not as an annotation).
+        if [ -s "${stderr_file}" ]; then
+          echo "--- nugate stderr ---"
+          cat "${stderr_file}"
+        fi
+
+        have_jq=0
+        if command -v jq >/dev/null 2>&1; then
+          have_jq=1
+        fi
+
+        # Require a non-empty file in addition to `jq empty` succeeding: some jq builds treat
+        # zero-byte input as trivially valid, which would otherwise let an operational error
+        # (exit 2, nothing written to stdout) fall through as if it were a well-formed
+        # zero-violation result.
+        json_valid=0
+        if [ "${have_jq}" = "1" ] && [ -s "${stdout_file}" ] && jq empty "${stdout_file}" >/dev/null 2>&1; then
+          json_valid=1
+        fi
+
+        if [ "${json_valid}" = "1" ]; then
+          mode=$(jq -r '.mode // "unknown"' "${stdout_file}")
+          min_age=$(jq -r '.minAgeDays // "unknown"' "${stdout_file}")
+          passed=$(jq -r '.passed' "${stdout_file}")
+
+          violation_count=$(jq '(.violations // []) | length' "${stdout_file}")
+          warning_count=$(jq '(.warnings // []) | length' "${stdout_file}")
+
+          # Violations only fail the step when the tool itself exited 1 (policy violations in
+          # enforce mode). In warn mode / exit 0, they're still surfaced, just as warnings.
+          annotation_level="warning"
+          if [ "${exit_code}" = "1" ]; then
+            annotation_level="error"
+          fi
+
+          i=0
+          while [ "$i" -lt "$violation_count" ]; do
+            v_id=$(jq -r ".violations[$i].id" "${stdout_file}")
+            v_version=$(jq -r ".violations[$i].version" "${stdout_file}")
+            v_kind=$(jq -r ".violations[$i].kind" "${stdout_file}")
+            v_created=$(jq -r ".violations[$i].created // \"unknown\"" "${stdout_file}")
+            v_age=$(jq -r ".violations[$i].ageDays // \"unknown\"" "${stdout_file}")
+            v_hint=$(jq -c ".violations[$i].allowlistHint // empty" "${stdout_file}")
+
+            msg="NuGate: ${v_id} ${v_version} -- ${v_kind} (age ${v_age}d, created ${v_created}, min ${min_age}d)."
+            if [ -n "${v_hint}" ]; then
+              msg="${msg} Allowlist to override: ${v_hint}"
+            fi
+
+            echo "::${annotation_level}::$(gh_escape "${msg}")"
+            i=$((i + 1))
+          done
+
+          i=0
+          while [ "$i" -lt "$warning_count" ]; do
+            w=$(jq -r ".warnings[$i]" "${stdout_file}")
+            echo "::warning::$(gh_escape "NuGate: ${w}")"
+            i=$((i + 1))
+          done
+
+          echo "NuGate check: mode=${mode} minAgeDays=${min_age} passed=${passed} violations=${violation_count} warnings=${warning_count}"
+        else
+          if [ "${have_jq}" = "0" ]; then
+            note="jq not found on this runner; showing raw NuGate output instead of per-violation annotations."
+          else
+            note="NuGate did not produce valid JSON output (likely an operational error before the check ran)."
+          fi
+          echo "::warning::$(gh_escape "${note}")"
+
+          raw="$(cat "${stdout_file}" 2>/dev/null || true)"
+          err="$(cat "${stderr_file}" 2>/dev/null || true)"
+          combined="${raw}"
+          if [ -n "${err}" ]; then
+            combined="${combined}"$'\n'"${err}"
+          fi
+          if [ -n "${combined}" ]; then
+            level="warning"
+            if [ "${exit_code}" != "0" ]; then
+              level="error"
+            fi
+            echo "::${level}::$(gh_escape "NuGate output: ${combined}")"
+          fi
+        fi
+
+        case "${exit_code}" in
+          0)
+            echo "NuGate: no blocking dependency-age policy violations found."
+            ;;
+          1)
+            echo "::error::NuGate found dependency-age policy violations. See annotations above; add entries to the allowlist in nugate.json to override deliberately, or wait out the cooldown."
+            ;;
+          2)
+            echo "::error::NuGate exited with an operational error (bad config, fail-closed API-lookup failure, or no restore outputs found). This did not evaluate the policy -- check the log output above."
+            ;;
+          *)
+            echo "::error::NuGate exited with unexpected status ${exit_code}."
+            ;;
+        esac
+
+        exit "${exit_code}"
