@@ -15,7 +15,7 @@
     <Copyright>© Abel Solutions</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://nugate.dev</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/abelsolutionsio/nugate</RepositoryUrl>
+    <RepositoryUrl>https://github.com/AbelSolutions-io/nugate</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile Condition="Exists('$(MSBuildProjectDirectory)\PACKAGE.md')">PACKAGE.md</PackageReadmeFile>
     <Version>0.1.0</Version>
