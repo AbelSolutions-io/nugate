@@ -34,9 +34,17 @@ internal static class ConfigLocator
 
         if (!string.IsNullOrWhiteSpace(configFilePath))
         {
-            // Explicit path is honored verbatim. If it does not exist, that is surfaced by the
-            // loader (an explicit-but-missing config is a configuration error, not a silent default).
-            return configFilePath!.Trim();
+            // An explicit path that does not exist is a configuration error, not a silent default —
+            // NuGateConfig.Load treats any missing file as "use defaults", which would quietly
+            // discard a strict policy whose file was moved or mistyped.
+            var explicitPath = configFilePath!.Trim();
+            if (!fileExists(explicitPath))
+            {
+                throw new NuGate.Core.NuGateConfigException(
+                    $"NuGateConfigFile is set to '{explicitPath}' but no such file exists.");
+            }
+
+            return explicitPath;
         }
 
         if (string.IsNullOrWhiteSpace(startDirectory))

@@ -44,16 +44,13 @@ jobs:
       - name: Pack NuGate.Tool
         run: dotnet pack src/NuGate.Tool/NuGate.Tool.csproj --no-restore --configuration Release --output artifacts/packages
 
-      # NuGate.Build's packing shape (tasks/ + build/ folders, dependency isolation for
-      # NuGate.Core + System.Text.Json) is being finalized in parallel on feat/build-task.
-      # Don't fail feat/ci on that in-flight work — warn instead. Once feat/build-task lands
-      # on main, consider dropping the `continue-on-error` here and packing normally.
-      - name: Pack NuGate.Build (packaging smoke check, best-effort)
-        id: pack_build
-        continue-on-error: true
+      - name: Pack NuGate.Build
         run: dotnet pack src/NuGate.Build/NuGate.Build.csproj --no-restore --configuration Release --output artifacts/packages
 
-      - name: Flag NuGate.Build pack outcome
-        if: steps.pack_build.outcome == 'failure'
-        shell: bash
-        run: echo "::warning::dotnet pack failed for NuGate.Build. Expected while its packing shape is still being finalized on feat/build-task; not treated as a CI failure on feat/ci."
+      # The task package's shape is a correctness property (tasks/ closure + build/ files);
+      # verify it on every CI run, not only at release time.
+      - name: Verify NuGate.Build package shape
+        shell: pwsh
+        run: |
+          $nupkg = Get-ChildItem artifacts/packages -Filter 'NuGate.Build.*.nupkg' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          ./tests/NuGate.Build.Tests/verify-package.ps1 -NupkgPath $nupkg.FullName

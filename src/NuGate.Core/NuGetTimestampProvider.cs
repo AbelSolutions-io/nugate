@@ -19,14 +19,20 @@ namespace NuGate.Core;
 /// points to. (If a future feed inlines <c>created</c> on the registration entry, that is used
 /// directly and the extra fetch is skipped.)
 ///
-/// Timestamps are immutable, so successful results are cached forever under
-/// <c>%LOCALAPPDATA%/nugate/cache</c> with an atomic temp-file+rename write, which is safe enough
-/// for parallel builds sharing the cache.
+/// Caching (<c>%LOCALAPPDATA%/nugate/cache</c>, atomic temp-file+rename writes, safe enough for
+/// parallel builds): the <c>created</c> timestamp is immutable and cached forever, but the
+/// <c>listed</c> flag is mutable — takedowns unlist a version AFTER it was cached — so a cache
+/// entry only short-circuits the network while its listed check is younger than
+/// <see cref="DefaultListedRevalidationTtl"/>. Revalidation refetches the registration leaf for a
+/// fresh <c>listed</c> and reuses the cached <c>created</c> (no catalog hop).
 /// </summary>
 public sealed class NuGetTimestampProvider : INuGetTimestampProvider
 {
     /// <summary>SemVer2 registration base (gzip variant — decompression is enabled on the default client).</summary>
     public const string DefaultRegistrationBaseUrl = "https://api.nuget.org/v3/registration5-gz-semver2/";
+
+    /// <summary>How long a cached <c>listed</c> flag is trusted before it is revalidated.</summary>
+    public static readonly TimeSpan DefaultListedRevalidationTtl = TimeSpan.FromHours(24);
 
     private static readonly JsonDocumentOptions DocumentOptions = new()
     {
@@ -38,18 +44,24 @@ public sealed class NuGetTimestampProvider : INuGetTimestampProvider
     private readonly string _cacheDirectory;
     private readonly string _registrationBaseUrl;
     private readonly int _maxAttempts;
+    private readonly TimeSpan _listedTtl;
+    private readonly Func<DateTimeOffset> _clock;
 
     public NuGetTimestampProvider(
         HttpClient? httpClient = null,
         string? cacheDirectory = null,
         string? registrationBaseUrl = null,
-        int maxAttempts = 3)
+        int maxAttempts = 3,
+        TimeSpan? listedRevalidationTtl = null,
+        Func<DateTimeOffset>? clock = null)
     {
         _http = httpClient ?? CreateDefaultClient();
         _cacheDirectory = string.IsNullOrWhiteSpace(cacheDirectory) ? DefaultCacheDirectory() : cacheDirectory!;
         var baseUrl = string.IsNullOrWhiteSpace(registrationBaseUrl) ? DefaultRegistrationBaseUrl : registrationBaseUrl!;
         _registrationBaseUrl = baseUrl.EndsWith("/", StringComparison.Ordinal) ? baseUrl : baseUrl + "/";
         _maxAttempts = Math.Max(1, maxAttempts);
+        _listedTtl = listedRevalidationTtl ?? DefaultListedRevalidationTtl;
+        _clock = clock ?? (() => DateTimeOffset.UtcNow);
     }
 
     public static string DefaultCacheDirectory()
@@ -82,7 +94,8 @@ public sealed class NuGetTimestampProvider : INuGetTimestampProvider
         var id = package.Id.Trim().ToLowerInvariant();
         var version = NuGetVersionUtil.Normalize(package.Version);
 
-        if (TryReadCache(id, version, out var cached))
+        var hasCached = TryReadCache(id, version, out var cached, out var listedIsFresh);
+        if (hasCached && listedIsFresh)
         {
             return cached;
         }
@@ -107,6 +120,13 @@ public sealed class NuGetTimestampProvider : INuGetTimestampProvider
 
         var created = leaf.Created;
         var listed = leaf.Listed;
+
+        if (!created.HasValue && hasCached)
+        {
+            // Listed-revalidation pass: `created` is immutable, so the cached value is
+            // authoritative and the catalog hop is skipped.
+            created = cached!.Created;
+        }
 
         if (!created.HasValue)
         {
@@ -347,9 +367,10 @@ public sealed class NuGetTimestampProvider : INuGetTimestampProvider
 
     // ---- Disk cache ------------------------------------------------------------------------
 
-    private bool TryReadCache(string id, string version, out PackageTimestamp? timestamp)
+    private bool TryReadCache(string id, string version, out PackageTimestamp? timestamp, out bool listedIsFresh)
     {
         timestamp = null;
+        listedIsFresh = false;
         var file = CacheFilePath(id, version);
 
         try
@@ -366,6 +387,13 @@ public sealed class NuGetTimestampProvider : INuGetTimestampProvider
             }
 
             timestamp = new PackageTimestamp(record.Created.Value, record.Listed);
+
+            // `created` is immutable, but `listed` changes when a version is taken down. Entries
+            // written before the listed check aged past the TTL must be revalidated (records from
+            // older cache layouts have no ListedCheckedAtUtc and always revalidate).
+            listedIsFresh = record.ListedCheckedAtUtc.HasValue
+                && _clock() - record.ListedCheckedAtUtc.Value < _listedTtl;
+
             return true;
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
@@ -386,17 +414,25 @@ public sealed class NuGetTimestampProvider : INuGetTimestampProvider
             {
                 Created = timestamp.Created,
                 Listed = timestamp.IsListed,
+                ListedCheckedAtUtc = _clock(),
             });
 
             File.WriteAllText(temp, json);
 
             try
             {
-                File.Move(temp, file); // atomic when the destination does not yet exist
+                // Atomic when the destination does not yet exist; replace on revalidation so the
+                // refreshed listed flag + check time land.
+                if (File.Exists(file))
+                {
+                    File.Delete(file);
+                }
+
+                File.Move(temp, file);
             }
             catch (IOException)
             {
-                // Another parallel build already wrote the (immutable) entry — discard our temp.
+                // Another parallel build wrote the entry concurrently — discard our temp.
                 TryDelete(temp);
             }
         }
@@ -453,5 +489,8 @@ public sealed class NuGetTimestampProvider : INuGetTimestampProvider
         public DateTimeOffset? Created { get; set; }
 
         public bool Listed { get; set; }
+
+        /// <summary>When the listed flag was last confirmed against the registration API.</summary>
+        public DateTimeOffset? ListedCheckedAtUtc { get; set; }
     }
 }

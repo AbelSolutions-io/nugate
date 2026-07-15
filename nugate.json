@@ -1,6 +1,9 @@
 {
   // NuGate dogfoods itself: this repo's own dependencies pass through the age gate.
+  // NuGate.* is exempt — local-feed packages (e.g. the e2e consumer fixture's NuGate.Build)
+  // have no nuget.org timestamps, exactly what exemptPrefixes exists for.
   "minAgeDays": 7,
   "mode": "enforce",
-  "onApiFailure": "fail"
+  "onApiFailure": "fail",
+  "exemptPrefixes": ["NuGate."]
 }

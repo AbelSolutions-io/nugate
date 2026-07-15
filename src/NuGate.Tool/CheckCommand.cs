@@ -58,6 +58,14 @@ public sealed class CheckCommand
                 "Run 'dotnet restore' first.");
         }
 
+        // An explicit --config that does not exist is an operational error — NuGateConfig.Load
+        // treats any missing file as "use defaults", which would silently discard the policy the
+        // user pointed at. A merely *discovered* path may be absent (defaults are correct then).
+        if (options.ConfigPath is not null && !File.Exists(options.ConfigPath))
+        {
+            return Fail($"Config file '{options.ConfigPath}' does not exist.");
+        }
+
         var configPath = options.ConfigPath ?? Path.Combine(scanRoot, NuGateConfig.DefaultFileName);
         NuGateConfig config;
         try

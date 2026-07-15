@@ -7,14 +7,25 @@ namespace NuGate.Build.Tests;
 public class ConfigLocatorTests
 {
     [Fact]
-    public void Explicit_path_is_honored_verbatim_even_when_missing()
+    public void Explicit_but_missing_path_is_a_config_error_not_a_silent_default()
     {
-        // An explicit --config that doesn't exist must NOT silently fall back to defaults; it is
-        // returned so the loader can surface it as a configuration error.
+        // NuGateConfig.Load treats any missing file as "use defaults", so returning a missing
+        // explicit path verbatim would silently discard the policy the user pointed at.
+        var ex = Assert.Throws<NuGate.Core.NuGateConfigException>(() => ConfigLocator.Resolve(
+            startDirectory: @"C:\repo\src\App",
+            configFilePath: @"C:\repo\custom-nugate.json",
+            fileExists: _ => false));
+
+        Assert.Contains(@"C:\repo\custom-nugate.json", ex.Message);
+    }
+
+    [Fact]
+    public void Explicit_existing_path_is_honored()
+    {
         var result = ConfigLocator.Resolve(
             startDirectory: @"C:\repo\src\App",
             configFilePath: @"C:\repo\custom-nugate.json",
-            fileExists: _ => false);
+            fileExists: _ => true);
 
         Assert.Equal(@"C:\repo\custom-nugate.json", result);
     }

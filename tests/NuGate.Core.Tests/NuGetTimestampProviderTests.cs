@@ -137,6 +137,56 @@ public class NuGetTimestampProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task Stale_listed_flag_is_revalidated_and_cached_created_is_reused()
+    {
+        var catalogUrl = "https://test.example/catalog/a.1.0.0.json";
+        var listedNow = true;
+        var handler = new StubHttpMessageHandler(url =>
+        {
+            if (url == IndexUrl("a"))
+            {
+                return (HttpStatusCode.OK, InlinedIndex(catalogUrl, "1.0.0", listed: listedNow));
+            }
+
+            if (url == catalogUrl)
+            {
+                return (HttpStatusCode.OK, CatalogLeaf("2024-05-01T00:00:00Z", listed: true, published: "2024-05-01T00:00:00Z"));
+            }
+
+            return (HttpStatusCode.NotFound, null);
+        });
+
+        var pkg = new PackageIdentity("A", "1.0.0");
+        var t0 = new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var first = await new NuGetTimestampProvider(new HttpClient(handler), _cacheDir, Base, clock: () => t0)
+            .GetTimestampAsync(pkg, CancellationToken.None);
+        Assert.True(first!.IsListed);
+
+        // The version is unlisted after a takedown; the cached listed flag is now 25h old (TTL 24h).
+        listedNow = false;
+        var requestsBefore = handler.Requests.Count;
+
+        var second = await new NuGetTimestampProvider(new HttpClient(handler), _cacheDir, Base, clock: () => t0.AddHours(25))
+            .GetTimestampAsync(pkg, CancellationToken.None);
+
+        Assert.False(second!.IsListed);              // the takedown is seen despite the cache
+        Assert.Equal(first.Created, second.Created); // immutable created reused from cache
+        var revalidationRequests = handler.Requests.Skip(requestsBefore).ToList();
+        Assert.Contains(IndexUrl("a"), revalidationRequests);   // registration refetched
+        Assert.DoesNotContain(catalogUrl, revalidationRequests); // catalog hop skipped
+
+        // And the refreshed flag is cached again: a third provider inside the new TTL window
+        // must answer from disk.
+        var requestsAfterSecond = handler.Requests.Count;
+        var third = await new NuGetTimestampProvider(new HttpClient(handler), _cacheDir, Base, clock: () => t0.AddHours(26))
+            .GetTimestampAsync(pkg, CancellationToken.None);
+
+        Assert.False(third!.IsListed);
+        Assert.Equal(requestsAfterSecond, handler.Requests.Count);
+    }
+
+    [Fact]
     public async Task Unknown_package_returns_null()
     {
         var handler = new StubHttpMessageHandler(_ => (HttpStatusCode.NotFound, null));

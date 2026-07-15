@@ -66,6 +66,23 @@ public class CheckCommandTests
     }
 
     [Fact]
+    public async Task Explicit_config_that_does_not_exist_is_an_operational_error()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("obj", "project.assets.json");
+        // loadConfig would return defaults for a missing file — the command must not get that far.
+        var harness = CreateHarness(loadConfig: _ => new NuGateConfig());
+        var missing = Path.Combine(temp.Path, "moved-nugate.json");
+
+        var exitCode = await harness.Command.RunAsync(
+            Options(temp.Path, configPath: missing), CancellationToken.None);
+
+        Assert.Equal(Program.ExitOperationalError, exitCode);
+        Assert.Contains(missing, harness.Stderr.ToString());
+        Assert.Contains("does not exist", harness.Stderr.ToString());
+    }
+
+    [Fact]
     public async Task Reader_failure_is_an_operational_error()
     {
         using var temp = new TempDirectory();
