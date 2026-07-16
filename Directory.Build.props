@@ -18,7 +18,7 @@
     <RepositoryUrl>https://github.com/AbelSolutions-io/nugate</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile Condition="Exists('$(MSBuildProjectDirectory)\PACKAGE.md')">PACKAGE.md</PackageReadmeFile>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
   </PropertyGroup>
 
 </Project>

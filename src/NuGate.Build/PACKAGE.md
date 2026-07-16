@@ -6,7 +6,7 @@ One line in `Directory.Build.props` gates every project in the repo, dev machine
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="NuGate.Build" Version="0.1.1" PrivateAssets="all" />
+  <PackageReference Include="NuGate.Build" Version="0.1.2" PrivateAssets="all" />
 </ItemGroup>
 ```
 
