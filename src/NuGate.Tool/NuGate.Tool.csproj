@@ -2,7 +2,12 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Both LTS targets: net8.0 reaches environments that haven't moved yet
+         (EOL Nov 2026), net10.0 covers fresh installs without the 8 runtime.
+         dotnet tool install picks the best match per machine. RollForward
+         covers the future gap (e.g. net10 asset on a net11-only machine). -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RollForward>LatestMajor</RollForward>
     <RootNamespace>NuGate.Tool</RootNamespace>
 
     <!-- dotnet global tool packaging -->
