@@ -2,7 +2,7 @@
 
 **A dependency age gate for NuGet.** The build fails if any resolved package version — direct or transitive — was published less than N days ago (default 7), unless explicitly allowlisted.
 
-> **v0.1.0 is live on nuget.org:** [`NuGate.Build`](https://www.nuget.org/packages/NuGate.Build) · [`NuGate.Tool`](https://www.nuget.org/packages/NuGate.Tool)
+> **v0.1.1 is live on nuget.org:** [`NuGate.Build`](https://www.nuget.org/packages/NuGate.Build) · [`NuGate.Tool`](https://www.nuget.org/packages/NuGate.Tool)
 
 ## The pieces
 
@@ -18,7 +18,7 @@
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="NuGate.Build" Version="0.1.0" PrivateAssets="all" />
+  <PackageReference Include="NuGate.Build" Version="0.1.1" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -32,7 +32,7 @@ nugate check          # non-zero exit on violations; --json for machine-readable
 **Or as a GitHub Action** (needs a dotnet SDK on the runner, e.g. `actions/setup-dotnet`):
 
 ```yaml
-- uses: AbelSolutions-io/nugate@v0.1.0
+- uses: AbelSolutions-io/nugate@v0.1.1
 ```
 
 ## Configure — `nugate.json` at the repo root

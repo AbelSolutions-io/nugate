@@ -41,6 +41,7 @@
   <ItemGroup>
     <None Include="build\NuGate.Build.targets" Pack="true" PackagePath="build\" />
     <None Include="build\NuGate.Build.props" Pack="true" PackagePath="build\" />
+    <None Include="PACKAGE.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- Collect the task assembly + its runtime closure into tasks/netstandard2.0/. Microsoft.Build.*

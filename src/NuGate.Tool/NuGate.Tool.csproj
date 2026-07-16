@@ -17,4 +17,8 @@
     <ProjectReference Include="..\NuGate.Core\NuGate.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="PACKAGE.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
 </Project>
